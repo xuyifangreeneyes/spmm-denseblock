@@ -1,0 +1,1 @@
+/usr/local/opt/llvm/bin/clang -fopenmp -L/usr/local/opt/llvm/lib -std=c++14 -lc++ -O3 -o main_no_omp main.cpp
