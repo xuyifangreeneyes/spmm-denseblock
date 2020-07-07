@@ -6,6 +6,7 @@
 #include <chrono>
 #include <algorithm>
 #include <omp.h>
+#include <cstring>
 
 std::mt19937_64 gen(1234);
 
@@ -214,8 +215,8 @@ void test_large_coo_spmm(int64_t l, int64_t m, int64_t n) {
 int main() {
     // test_small_csr_spmm();
     // test_small_coo_spmm();
-    test_large_csr_spmm(1000, 1500, 1200);
-    test_large_coo_spmm(1000, 1500, 1200);
+    test_large_csr_spmm(5000, 5500, 5200);
+    test_large_coo_spmm(5000, 5500, 5200);
     
     return 0;
 }
