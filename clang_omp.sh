@@ -24,3 +24,5 @@ g++ -std=c++14 -fPIC -c -o matrix.o matrix.cc
 nvcc -gencode arch=compute_61,code=sm_61 -std=c++14 --compiler-options -fPIC -c -o spmm.o spmm.cu
 
 nvcc -I/usr/local/cuda/include -L/usr/local/cuda/lib64  -lcuda -lcudart -lcublas -o hello_2 matrix.o spmm.o
+
+nvcc try_cusparse.cu -lcusparse -o hello_cusparse
