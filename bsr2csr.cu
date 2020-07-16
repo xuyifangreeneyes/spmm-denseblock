@@ -86,18 +86,18 @@ do { \
 
 int main(int argc, char* argv[]) {
     float p = std::stof(argv[1]);
-    printf("%f\n", p);
+    int blockDim = std::stof(argv[2]); 
+    printf("p = %f blockDim = %d\n", p, blockDim);
 
     cudaError_t cudaStat1, cudaStat2, cudaStat3;
     cusparseStatus_t status;
     cusparseHandle_t handle = 0;
     cusparseMatDescr_t csrDescr = 0, bsrDescr = 0;
 
-    int mb = 500;
-    int nb = 600;
-    int blockDim = 2;
-    int m = mb * blockDim;
-    int n = nb * blockDim;
+    int m = 4096;
+    int n = 4096;
+    int mb = m / blockDim;
+    int nb = n / blockDim;
     int dim = 100;
     int nnzb = 0;
     int nnz = 0;
@@ -205,24 +205,6 @@ int main(int argc, char* argv[]) {
     float time1, time2;
     cudaEvent_t start1, stop1, start2, stop2;
 
-    HANDLE_ERROR( cudaEventCreate(&start1) );
-    HANDLE_ERROR( cudaEventCreate(&stop1) );
-    HANDLE_ERROR( cudaEventRecord(start1, 0) );
-
-    status = cusparseScsrmm(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, m, dim, n, nnz,
-                            &fone, csrDescr, csrVal, csrRowPtr, csrColInd, y, n, &fzero, z1, m);
-    
-    HANDLE_ERROR( cudaEventRecord(stop1, 0) );
-    HANDLE_ERROR( cudaEventSynchronize(stop1) );
-    HANDLE_ERROR( cudaEventElapsedTime(&time1, start1, stop1) );
-                                               
-    printf("csrmm cost time:  %3.10f ms \n", time1);   
-
-    if (status != CUSPARSE_STATUS_SUCCESS) {
-        CLEANUP("csrmm failed");
-        return 1;
-    }
-
     HANDLE_ERROR( cudaEventCreate(&start2) );
     HANDLE_ERROR( cudaEventCreate(&stop2) );
     HANDLE_ERROR( cudaEventRecord(start2, 0) );
@@ -241,6 +223,27 @@ int main(int argc, char* argv[]) {
         CLEANUP("bsrmm failed");
         return 1;
     }
+
+    HANDLE_ERROR( cudaEventCreate(&start1) );
+    HANDLE_ERROR( cudaEventCreate(&stop1) );
+    HANDLE_ERROR( cudaEventRecord(start1, 0) );
+
+    status = cusparseScsrmm(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, m, dim, n, nnz,
+                            &fone, csrDescr, csrVal, csrRowPtr, csrColInd, y, n, &fzero, z1, m);
+    
+    HANDLE_ERROR( cudaEventRecord(stop1, 0) );
+    HANDLE_ERROR( cudaEventSynchronize(stop1) );
+    HANDLE_ERROR( cudaEventElapsedTime(&time1, start1, stop1) );
+                                               
+    printf("csrmm cost time:  %3.10f ms \n", time1);   
+
+    if (status != CUSPARSE_STATUS_SUCCESS) {
+        CLEANUP("csrmm failed");
+        return 1;
+    }
+
+    float ratio = time2 / time1;
+    printf("bsrmm time / csrmm time: %3.10f\n", ratio);
 
     cudaStat1 = cudaMemcpy(z1HostPtr, z1, (size_t)(m * dim * sizeof(float)), cudaMemcpyDeviceToHost);
     cudaStat2 = cudaMemcpy(z2HostPtr, z2, (size_t)(m * dim * sizeof(float)), cudaMemcpyDeviceToHost);
@@ -273,7 +276,7 @@ int main(int argc, char* argv[]) {
     bool flag = true;
     for (int i = 0; i < m * dim; ++i) {
         float error = fabs(z1HostPtr[i] - z2HostPtr[i]);
-        if (error > 0.01) {
+        if (error > 0.05) {
             printf("inconsistent result: %d %f", i, error);
             flag = false;
             break;
