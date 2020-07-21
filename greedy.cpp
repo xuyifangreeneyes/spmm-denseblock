@@ -5,8 +5,8 @@
 #include <queue>
 #include <assert.h>
 
-const int N = 169343;
-const int M = 1166243;
+const int N = 235868;
+const int M = 2358104;
 
 void dump_csr(const std::vector<std::vector<int>>& edges, const std::string& name) {
     std::cout << "dumping" << std::endl;
@@ -39,8 +39,8 @@ void dump_csr(const std::vector<std::vector<int>>& edges, const std::string& nam
 int main() {
     std::vector<int> src_vec;
     std::vector<int> dst_vec;
-    std::fstream s1("src.txt", std::ios_base::in);
-    std::fstream s2("dst.txt", std::ios_base::in);
+    std::fstream s1("ogbn-arxiv/src.txt", std::ios_base::in);
+    std::fstream s2("ogbn-arxiv/dst.txt", std::ios_base::in);
 
     for (int i = 0; i < M; ++i) {
         int x;
@@ -78,7 +78,7 @@ int main() {
     }
 
 
-    dump_csr(edges, "arxiv_1");
+    dump_csr(edges, "protein_0");
 
     std::vector<int> visit(N, -1);
     std::queue<int> q;
@@ -134,7 +134,7 @@ int main() {
         std::cout << std::endl;
     }
 
-    dump_csr(reordered_edges, "arxiv_4");
+    dump_csr(reordered_edges, "protein_1");
 
     int block_size = 4;
     int nb = (N + block_size - 1) / block_size;
@@ -158,10 +158,10 @@ int main() {
                 ++nonempty_block_num;
             }
         }
-        if (x1 % 1000 == 0) {
-            std::cout << "x1 = " << x1 << std::endl;
-            std::cout << "nonempty = " << nonempty_block_num << std::endl;
-        }
+        // if (x1 % 1000 == 0) {
+        //     std::cout << "x1 = " << x1 << std::endl;
+        //     std::cout << "nonempty = " << nonempty_block_num << std::endl;
+        // }
     }
 
     std::cout << nonempty_block_num << std::endl;
