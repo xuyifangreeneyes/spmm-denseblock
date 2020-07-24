@@ -24,8 +24,8 @@ void readCSRMatrix(int m, int n, int nnz, int** hostCsrRowPtr, int** hostCsrColI
     *hostCsrColInd = (int*) malloc(nnz * sizeof(int));
     *hostCsrVal = (float*) malloc(nnz * sizeof(float));
     
-    std::fstream s1("collab_rcmk_indptr.txt");
-    std::fstream s2("collab_rcmk_indices.txt");
+    std::fstream s1("ddi_bfs_indptr.txt");
+    std::fstream s2("ddi_bfs_indices.txt");
     int _m_1;
     s1 >> _m_1;
     printf("m = %d _m_1 = %d\n", m, _m_1);
@@ -85,10 +85,10 @@ int main() {
     cusparseHandle_t handle = 0;
     cusparseMatDescr_t csrDescr = 0, bsrDescr = 0;
 
-    int m = 235868;
+    int m = 4267;
     int n = m;    
-    int nnz = 2358104;
-    int blockDim = 32;
+    int nnz = 2135822;
+    int blockDim = 64;
     int mb = (m + blockDim - 1) / blockDim;
     int nb = (n + blockDim - 1) / blockDim;
     int nnzb = 0;
@@ -219,10 +219,10 @@ int main() {
 
     printf("kkkkk6\n");
 
-    int a = nnzb * blockDim * blockDim * sizeof(float);
-    printf("aaa === %d", a);
+    long long a = (long long) nnzb * (long long)(blockDim * blockDim) * sizeof(float);
+    printf("aaa === %lld", a);
     cudaStat1 = cudaMalloc((void**)&bsrColInd, nnzb * sizeof(int));
-    cudaStat2 = cudaMalloc((void**)&bsrVal, nnzb * blockDim * blockDim * sizeof(float));
+    cudaStat2 = cudaMalloc((void**)&bsrVal, a);
     if (cudaStat1 != cudaSuccess || cudaStat2 != cudaSuccess) {
         CLEANUP("Device malloc failed2 (BSR matrix)");
         printf("%s\n", cudaGetErrorString(cudaStat1));
@@ -236,18 +236,18 @@ int main() {
         return 1;
     }
     
-    if (csrVal) {
-        cudaFree(csrVal);
-        csrVal = 0;
-    }
-    if (csrRowPtr) {
-        cudaFree(csrRowPtr);
-        csrRowPtr = 0;
-    }
-    if (csrColInd) {
-        cudaFree(csrColInd);
-        csrColInd = 0;
-    }
+    // if (csrVal) {
+    //     cudaFree(csrVal);
+    //     csrVal = 0;
+    // }
+    // if (csrRowPtr) {
+    //     cudaFree(csrRowPtr);
+    //     csrRowPtr = 0;
+    // }
+    // if (csrColInd) {
+    //     cudaFree(csrColInd);
+    //     csrColInd = 0;
+    // }
 
     printf("density:  %3.10f \n", (1.0 * nnzb) / ((mb * 1.0) * (nb * 1.0)));  
 

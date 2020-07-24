@@ -3,17 +3,10 @@
 #include <math.h>
 #include <vector>
 #include <random>
+#include <fstream>
+#include <assert.h>
 #include <cuda_runtime.h>
 #include "cusparse.h"
-
-static void handleError(cudaError_t err, const char* file, int line) {
-    if (err != cudaSuccess) {
-        printf("%s in %s at line %d\n", cudaGetErrorString(err), file, line);
-        exit(-1);
-    }
-}
-
-#define HANDLE_ERROR( err ) (handleError( err, __FILE__, __LINE__ ))
 
 std::mt19937_64 gen(1234);
 
@@ -26,7 +19,7 @@ T* vec2ptr(std::vector<T> v) {
     return ptr;
 }
 
-int randomCSRMatrix(int m, int n, float p, int** hostCsrRowPtr, int** hostCsrColInd, float** hostCsrVal, float minVal=-10, float maxVal=10) {
+int randomCSRMatrix(int m, int n, float p, int** hostCsrRowPtr, int** hostCsrColInd, float** hostCsrVal, float minVal=-1, float maxVal=1) {
     std::uniform_real_distribution<float> flip(0, 1), dist(minVal, maxVal);
     *hostCsrRowPtr = (int*) malloc((m + 1) * sizeof(int));
     int cnt = 0;
@@ -42,14 +35,61 @@ int randomCSRMatrix(int m, int n, float p, int** hostCsrRowPtr, int** hostCsrCol
             }
         }
         (*hostCsrRowPtr)[i] = cnt;
+        // if (i % 1000 == 0) {
+        //     printf("i = %d\n", i);
+        // }
     }
     *hostCsrColInd = vec2ptr(std::move(indices));
     *hostCsrVal = vec2ptr(std::move(vals));
 
+    // Generating random CSR matrix is time-consuming, so we record it for next time use.
+    // std::fstream s1("csr_indptr.txt", std::ios::out | std::ios::trunc);
+    // std::fstream s2("csr_indices.txt", std::ios::out | std::ios::trunc);
+
+    // s1 << m + 1 << std::endl;
+    // for (int i = 0; i <= m; ++i) {
+    //     s1 << (*hostCsrRowPtr)[i] << " ";
+    // }
+    // s1 << std::endl;
+
+    // s2 << cnt << std::endl;
+    // for (int i = 0; i < cnt; ++i) {
+    //     s2 << (*hostCsrColInd)[i] << " ";
+    // }
+    // s2 << std::endl;
+
     return cnt;
 }
 
-float* randomDenseMatrix(int n, int dim, float minVal=-10, float maxVal=10) {
+int readAndFillCSRMatrix(int m, int n, int** hostCsrRowPtr, int** hostCsrColInd, float** hostCsrVal, float minVal=-1, float maxVal=1) {
+    std::fstream s1("csr_indptr.txt", std::ios::in);
+    std::fstream s2("csr_indices.txt", std::ios::in);
+
+    int xx;
+    s1 >> xx;
+    assert(m + 1 == xx);
+    *hostCsrRowPtr = (int*) malloc((m + 1) * sizeof(int));
+    for (int i = 0; i <= m; ++i) {
+        s1 >> (*hostCsrRowPtr)[i];
+    }
+
+    int nnz;
+    s2 >> nnz;
+    *hostCsrColInd = (int*) malloc(nnz * sizeof(int));
+    for (int i = 0; i < nnz; ++i) {
+        s2 >> (*hostCsrColInd)[i];
+    }
+
+    *hostCsrVal = (float*) malloc(nnz * sizeof(float));
+    std::uniform_real_distribution<float> dist(minVal, maxVal);
+    for (int i = 0; i < nnz; ++i) {
+        (*hostCsrVal)[i] = dist(gen);
+    }
+
+    return nnz;
+}
+
+float* randomDenseMatrix(int n, int dim, float minVal=-1, float maxVal=1) {
     std::uniform_real_distribution<float> dist(minVal, maxVal);
     int sz = n * dim;
     float* ptr = (float*) malloc(sz * sizeof(float));
@@ -71,22 +111,35 @@ do { \
     if (csrColInd) cudaFree(csrColInd); \
     if (csrVal) cudaFree(csrVal); \
     if (y) cudaFree(y); \
+    if (y0) cudaFree(y0); \
     if (z) cudaFree(z); \
+    if (z0) cudaFree(z0); \
     cudaDeviceReset(); \
     fflush(stdout); \
-} while (0) \
+} while (0)
+
+#define HANDLE_ERROR( err ) \
+if (err != cudaSuccess) { \
+    printf("%s in %s at linedd %d\n", cudaGetErrorString(err), __FILE__, __LINE__); \
+    CLEANUP("cuda error occurred"); \
+    exit(-1); \
+}
+
+#define HANDLE_CUSPARSE_ERROR( err, s ) \
+if (err != CUSPARSE_STATUS_SUCCESS) { \
+    CLEANUP(s); \
+    exit(-1); \
+}
 
 int main(int argc, char* argv[]) {
     float p = std::stof(argv[1]);
     int dim = std::stoi(argv[2]);
     printf("p = %f dim = %d\n", p, dim);
 
-    cudaError_t cudaStat1, cudaStat2, cudaStat3;
-    cusparseStatus_t status;
     cusparseHandle_t handle = 0;
     cusparseMatDescr_t descr = 0;
 
-    int m = 131072;
+    int m = 2 << 16;
     int n = m;    
     int nnz = 0;
     float fzero = 0.0;
@@ -101,109 +154,86 @@ int main(int argc, char* argv[]) {
 
     float* yHostPtr = 0;
     float* y = 0;
+    float* y0 = 0;
     float* zHostPtr = 0;
     float* z = 0;
+    float* z0 = 0;
 
     printf("generate random CSR matrix\n");
 
     nnz = randomCSRMatrix(m, n, p, &hostCsrRowPtr, &hostCsrColInd, &hostCsrVal);
+    // nnz = readAndFillCSRMatrix(m, n, &hostCsrRowPtr, &hostCsrColInd, &hostCsrVal);
+
+    printf("density of BSR matrix is %f\n", (nnz * 1.0) / (m * n));
 
     printf("gpu memory malloc and memcpy...\n");
 
-    cudaStat1 = cudaMalloc((void**)&csrRowPtr, (m + 1) * sizeof(int));
-    cudaStat2 = cudaMalloc((void**)&csrColInd, nnz * sizeof(int));
-    cudaStat3 = cudaMalloc((void**)&csrVal, nnz * sizeof(float));
-    if (cudaStat1 != cudaSuccess || cudaStat2 != cudaSuccess || cudaStat3 != cudaSuccess) {
-        CLEANUP("Device malloc failed (CSR matrix)");
-        return 1;
-    }
+    HANDLE_ERROR( cudaMalloc((void**)&csrRowPtr, (m + 1) * sizeof(int)) );
+    HANDLE_ERROR( cudaMalloc((void**)&csrColInd, nnz * sizeof(int)) );
+    HANDLE_ERROR( cudaMalloc((void**)&csrVal, nnz * sizeof(float)) );
 
-    cudaStat1 = cudaMemcpy(csrRowPtr, hostCsrRowPtr, (size_t)((m + 1) * sizeof(int)), cudaMemcpyHostToDevice);
-    cudaStat2 = cudaMemcpy(csrColInd, hostCsrColInd, (size_t)(nnz * sizeof(int)), cudaMemcpyHostToDevice);
-    cudaStat3 = cudaMemcpy(csrVal, hostCsrVal, (size_t)(nnz * sizeof(float)), cudaMemcpyHostToDevice);
-    if (cudaStat1 != cudaSuccess || cudaStat2 != cudaSuccess || cudaStat3 != cudaSuccess) {
-        CLEANUP("Memcpy from Host to Device failed (CSR matrix)");
-        return 1;
-    }
+    HANDLE_ERROR( cudaMemcpy(csrRowPtr, hostCsrRowPtr, (size_t)((m + 1) * sizeof(int)), cudaMemcpyHostToDevice) );
+    HANDLE_ERROR( cudaMemcpy(csrColInd, hostCsrColInd, (size_t)(nnz * sizeof(int)), cudaMemcpyHostToDevice) );
+    HANDLE_ERROR( cudaMemcpy(csrVal, hostCsrVal, (size_t)(nnz * sizeof(float)), cudaMemcpyHostToDevice) );
 
-    status = cusparseCreate(&handle);
-    if (status != CUSPARSE_STATUS_SUCCESS) {
-        CLEANUP("CUSPARSE Library initialization failed");
-        return 1;
-    }
+    HANDLE_CUSPARSE_ERROR( cusparseCreate(&handle), "CUSPARSE Library initialization failed" );
 
-    status = cusparseCreateMatDescr(&descr);
-    if (status != CUSPARSE_STATUS_SUCCESS) {
-        CLEANUP("CSR Matrix descriptor initialization failed");
-        return 1;
-    }
+    HANDLE_CUSPARSE_ERROR( cusparseCreateMatDescr(&descr), "CSR Matrix descriptor initialization failed" );
     cusparseSetMatType(descr, CUSPARSE_MATRIX_TYPE_GENERAL);
     cusparseSetMatIndexBase(descr, CUSPARSE_INDEX_BASE_ZERO);
+
+    printf("prepare y and z...\n");
 
     yHostPtr = randomDenseMatrix(n, dim);
     zHostPtr = (float*) malloc(m * dim * sizeof(float));
 
-    cudaStat1 = cudaMalloc((void**)&y, n * dim * sizeof(float));
-    cudaStat2 = cudaMalloc((void**)&z, m * dim * sizeof(float));
-    if (cudaStat1 != cudaSuccess || cudaStat2 != cudaSuccess) {
-        CLEANUP("Device malloc failed (dense matrix)");
-        return 1;
-    }
+    HANDLE_ERROR( cudaMalloc((void**)&y, n * dim * sizeof(float)) );
+    HANDLE_ERROR( cudaMalloc((void**)&z, m * dim * sizeof(float)) );
 
-    cudaStat1 = cudaMemcpy(y, yHostPtr, (size_t)(n * dim * sizeof(float)), cudaMemcpyHostToDevice);
-    if (cudaStat1 != cudaSuccess) {
-        CLEANUP("Memcpy from Host to Device failed (y)");
-        return 1;
-    }
+    HANDLE_ERROR( cudaMemcpy(y, yHostPtr, (size_t)(n * dim * sizeof(float)), cudaMemcpyHostToDevice) );
 
-    cudaStat1 = cudaMemset((void*)z, 0, m * dim * sizeof(float));
-    if (cudaStat1 != cudaSuccess) {
-        CLEANUP("Memset on Device failed (z)");
-        return 1;
+    printf("warm up...\n");
+    HANDLE_ERROR( cudaMalloc((void**)&y0, n * dim * sizeof(float)) );
+    HANDLE_ERROR( cudaMalloc((void**)&z0, m * dim * sizeof(float)) );
+    HANDLE_ERROR( cudaMemset((void*)y0, 0, n * dim * sizeof(float)) );
+    HANDLE_ERROR( cudaMemset((void*)z0, 0, m * dim * sizeof(float)) );
+    int warnupRounds = 3;
+    for (int i = 0; i < warnupRounds; ++i) {
+        HANDLE_CUSPARSE_ERROR( cusparseScsrmm2(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+                                               m, dim, n, nnz, &fone, descr, csrVal, csrRowPtr, csrColInd, y0, dim, &fzero, z0, m),
+                                               "warmup cusparseScsrmm2 failed" );
     }
 
     printf("cusparseScsrmm...\n");
+    float totalTime = 0;
+    int rounds = 10;
+    for (int i = 0; i < rounds; ++i) {
+        HANDLE_ERROR( cudaMemset((void*)z, 0, m * dim * sizeof(float)) );
+        
+        float time;
+        cudaEvent_t start, stop;
+        HANDLE_ERROR( cudaEventCreate(&start) );
+        HANDLE_ERROR( cudaEventCreate(&stop) );
+        HANDLE_ERROR( cudaEventRecord(start, 0) );
 
-    float time;
-    cudaEvent_t start, stop;
+        HANDLE_CUSPARSE_ERROR( cusparseScsrmm2(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+                                               m, dim, n, nnz, &fone, descr, csrVal, csrRowPtr, csrColInd, y, dim, &fzero, z, m),
+                                               "cusparseScsrmm2 failed" );
 
-    HANDLE_ERROR( cudaEventCreate(&start) );
-    HANDLE_ERROR( cudaEventCreate(&stop) );
-    HANDLE_ERROR( cudaEventRecord(start, 0) );
-
-    status = cusparseScsrmm(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, m, dim, n, nnz,
-                            &fone, descr, csrVal, csrRowPtr, csrColInd, y, n, &fzero, z, m);
-
-    HANDLE_ERROR( cudaEventRecord(stop, 0) );
-    HANDLE_ERROR( cudaEventSynchronize(stop) );
-    HANDLE_ERROR( cudaEventElapsedTime(&time, start, stop) );
-
-    printf("csrmm cost time:  %3.10f ms \n", time);  
-    
-    if (status != CUSPARSE_STATUS_SUCCESS) {
-        CLEANUP("csrmm failed");
-        return 1;
+        HANDLE_ERROR( cudaEventRecord(stop, 0) );
+        HANDLE_ERROR( cudaEventSynchronize(stop) );
+        HANDLE_ERROR( cudaEventElapsedTime(&time, start, stop) );
+        printf("[%d] csrmm cost time:  %3.10f ms \n", i, time);
+        totalTime += time;  
     }
+    printf("average csrmm cost time: %3.10f ms \n", totalTime / rounds);
 
-    cudaStat1 = cudaMemcpy(zHostPtr, z, (size_t)(m * dim * sizeof(float)), cudaMemcpyDeviceToHost);
-    if (cudaStat1 != cudaSuccess) {
-        CLEANUP("Memcpy from Device to Host failed (z)");
-        return 1;
-    }
+    HANDLE_ERROR( cudaMemcpy(zHostPtr, z, (size_t)(m * dim * sizeof(float)), cudaMemcpyDeviceToHost) );
 
-    status = cusparseDestroyMatDescr(descr);
+    HANDLE_CUSPARSE_ERROR( cusparseDestroyMatDescr(descr), "Matrix descriptor destruction failed" );
     descr = 0;
-    if (status != CUSPARSE_STATUS_SUCCESS) {
-        CLEANUP("Matrix descriptor destruction failed");
-        return 1;
-    }
-
-    status = cusparseDestroy(handle);
+    HANDLE_CUSPARSE_ERROR( cusparseDestroy(handle), "CUSPARSE Library release of resources failed" );
     handle = 0;
-    if (status != CUSPARSE_STATUS_SUCCESS) {
-        CLEANUP("CUSPARSE Library release of resources failed");
-        return 1;
-    }
 
     CLEANUP("end");
 

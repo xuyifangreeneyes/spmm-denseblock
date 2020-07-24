@@ -5,8 +5,8 @@
 #include <queue>
 #include <assert.h>
 
-const int N = 235868;
-const int M = 2358104;
+const int N = 4267;
+const int M = 2135822;
 
 void dump_csr(const std::vector<std::vector<int>>& edges, const std::string& name) {
     std::cout << "dumping " << name << std::endl;
@@ -108,8 +108,8 @@ void dump_heatmap(const std::vector<std::vector<int>>& edges, const std::string&
 int main() {
     std::vector<int> src_vec;
     std::vector<int> dst_vec;
-    std::fstream s1("ogbl-collab/src.txt");
-    std::fstream s2("ogbl-collab/dst.txt");
+    std::fstream s1("ogbl-ddi/src.txt");
+    std::fstream s2("ogbl-ddi/dst.txt");
 
     std::cout << "read src.txt..." << std::endl;
 
@@ -143,10 +143,10 @@ int main() {
     std::cout << "sort edges..." << std::endl;
 
     for (int i = 0; i < N; ++i) {
-        // std::sort(edges[i].begin(), edges[i].end(), [&edges](int x, int y) {
-        //     return edges[x].size() < edges[y].size();
-        // });
-        std::sort(edges[i].begin(), edges[i].end());
+        std::sort(edges[i].begin(), edges[i].end(), [&edges](int x, int y) {
+            return edges[x].size() < edges[y].size();
+        });
+        // std::sort(edges[i].begin(), edges[i].end());
     }
 
     for (int x = 0; x < 50; ++x) {
@@ -158,14 +158,14 @@ int main() {
     }
 
 
-    dump_csr(edges, "collab_naive1");
+    // dump_csr(edges, "ddi_naive");
 
     std::vector<int> block_sizes = {2, 4, 8, 16, 32, 64};
-    for (int block_size : block_sizes) {
-        calculate_density_and_utilization(edges, "naive", block_size);
-    }
+    // for (int block_size : block_sizes) {
+    //     calculate_density_and_utilization(edges, "naive", block_size);
+    // }
 
-    // dump_heatmap(edges, "collab_naive", 32);
+    // dump_heatmap(edges, "ddi_naive", 1);
 
     std::cout << "bfs..." << std::endl;
 
@@ -225,13 +225,13 @@ int main() {
         std::cout << std::endl;
     }
 
-    dump_csr(reordered_edges, "collab_bfs");
+    dump_csr(reordered_edges, "ddi_rcmk");
 
     for (int block_size : block_sizes) {
         calculate_density_and_utilization(reordered_edges, "rcmk", block_size);
     }
 
-    // dump_heatmap(reordered_edges, "collab_rcmk", 32);
+    dump_heatmap(reordered_edges, "ddi_rcmk", 1);
 
     return 0;
 }

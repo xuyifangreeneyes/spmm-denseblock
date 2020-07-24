@@ -1,10 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-name = 'proteins_rcmk_heatmap'
+name = 'ddi_bfs_heatmap'
 
 with open(name + '.txt', 'r') as f:
     n = int(f.readline().strip())
+    # lines = f.readlines()
+    # print(lines[0])
+    # print(lines[-1])
+    # print(len(lines))
+    # print(len(f.readlines()))
     data = np.array([list(map(int, line.strip().split())) for line in f.readlines()])
 
 print(data)
