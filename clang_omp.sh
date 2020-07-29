@@ -29,3 +29,10 @@ nvcc try_cusparse.cu -lcusparse -o hello_cusparse
 
 nvcc run_csr.cu -lcusparse -O3 -o run_csr
 nvcc run_bsr.cu -lcusparse -O3 -o run_bsr
+
+/home/ubuntu/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04/bin/clang -fopenmp -L/home/ubuntu/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04/lib -std=c++14 -lstdc++ -lm -O3 -I/usr/local/cuda/include -L/usr/local/cuda/lib64  -lcuda -lcudart -lcublas -o test_block_cublas test_block_cublas.cu
+
+nvcc -fopenmp -L/home/ubuntu/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04/lib -std=c++14 -lstdc++ -lm -O3 -I/usr/local/cuda/include -L/usr/local/cuda/lib64  -lcuda -lcudart -lcublas -o test_block_cublas test_block_cublas.cu
+
+
+/home/ubuntu/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04/bin/clang -fopenmp -L/home/ubuntu/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04/lib -std=c++14 -lstdc++ -lm -lcublas_static -lculibos -lcudart_static -lpthread -ldl -I/usr/local/cuda/include -L/usr/local/cuda/lib64 -O3 -o test_block_cublas test_block_cublas.cu

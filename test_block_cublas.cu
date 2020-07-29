@@ -1,12 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <vector>
 #include <random>
 #include <fstream>
+#include <string>
 #include <assert.h>
+#include <thread>
+#include <algorithm>
+#include <omp.h>
 #include <cuda_runtime.h>
-#include "cusparse.h"
+#include "cublas_v2.h"
 
 std::mt19937_64 gen(1234);
 
@@ -19,9 +22,9 @@ T* vec2ptr(std::vector<T> v) {
     return ptr;
 }
 
-int randomBSRMatrix(int mb, int nb, int blockDim, float p, int** hostBsrRowPtr, int** hostBsrColInd, float** hostBsrVal, float minVal=-1, float maxVal=1) {
+int randomBSRMatrix(int mb, int nb, int bsize, float p, int** hostBsrRowPtr, int** hostBsrColInd, float** hostBsrVal, float minVal=-1, float maxVal=1) {
     std::uniform_real_distribution<float> flip(0, 1), dist(minVal, maxVal);
-    int blockNum = blockDim * blockDim;
+    int blockNum = bsize * bsize;
     *hostBsrRowPtr = (int*) malloc((mb + 1) * sizeof(int));
     int cnt = 0;
     (*hostBsrRowPtr)[0] = cnt;
@@ -46,7 +49,7 @@ int randomBSRMatrix(int mb, int nb, int blockDim, float p, int** hostBsrRowPtr, 
     *hostBsrVal = vec2ptr(std::move(vals));
 
     // Generating random BSR matrix may be time-consuming, so we record it for next time use.
-    // std::string bd = std::to_string(blockDim);
+    // std::string bd = std::to_string(bsize);
     // std::fstream s1("bsr_" + bd + "_indptr.txt", std::ios::out | std::ios::trunc);
     // std::fstream s2("bsr_" + bd + "_indices.txt", std::ios::out | std::ios::trunc);
 
@@ -65,8 +68,8 @@ int randomBSRMatrix(int mb, int nb, int blockDim, float p, int** hostBsrRowPtr, 
     return cnt;
 }
 
-int readAndFillBSRMatrix(int mb, int nb, int blockDim, int** hostBsrRowPtr, int** hostBsrColInd, float** hostBsrVal, float minVal=-1, float maxVal=1) {
-    std::string bd = std::to_string(blockDim);
+int readAndFillBSRMatrix(int mb, int nb, int bsize, int** hostBsrRowPtr, int** hostBsrColInd, float** hostBsrVal, float minVal=-1, float maxVal=1) {
+    std::string bd = std::to_string(bsize);
     std::fstream s1("bsr_" + bd + "_indptr.txt", std::ios::in);
     std::fstream s2("bsr_" + bd + "_indices.txt", std::ios::in);
 
@@ -85,7 +88,7 @@ int readAndFillBSRMatrix(int mb, int nb, int blockDim, int** hostBsrRowPtr, int*
         s2 >> (*hostBsrColInd)[i];
     }
 
-    int num = nnzb * blockDim * blockDim;
+    int num = nnzb * bsize * bsize;
     *hostBsrVal = (float*) malloc(num * sizeof(float));
     std::uniform_real_distribution<float> dist(minVal, maxVal);
     for (int i = 0; i < num; ++i) {
@@ -117,9 +120,7 @@ do { \
     if (bsrColInd) cudaFree(bsrColInd); \
     if (bsrVal) cudaFree(bsrVal); \
     if (y) cudaFree(y); \
-    if (y0) cudaFree(y0); \
     if (z) cudaFree(z); \
-    if (z0) cudaFree(z0); \
     cudaDeviceReset(); \
     fflush(stdout); \
 } while (0)
@@ -127,33 +128,31 @@ do { \
 #define HANDLE_ERROR( err ) \
 if (err != cudaSuccess) { \
     printf("error occurred in %s at line %d\n", __FILE__, __LINE__); \
-    CLEANUP(cudaGetErrorString(err)); \
+    CLEANUP(""); \
     exit(-1); \
 }
 
-#define HANDLE_CUSPARSE_ERROR( err, s ) \
-if (err != CUSPARSE_STATUS_SUCCESS) { \
-    CLEANUP(s); \
+#define HANDLE_CUBLAS_ERROR( err ) \
+if (err != CUBLAS_STATUS_SUCCESS) { \
+    printf("error occurred in %s at line %d\n", __FILE__, __LINE__); \
+    CLEANUP(""); \
     exit(-1); \
 }
 
 int main(int argc, char* argv[]) {
     float p = std::stof(argv[1]);
-    int blockDim = std::stoi(argv[2]); 
+    int bsize = std::stoi(argv[2]); 
     int dim = std::stoi(argv[3]);
-    printf("p = %f blockDim = %d dim = %d\n", p, blockDim, dim);
+    printf("p = %f bsize = %d dim = %d\n", p, bsize, dim);
 
-    cusparseHandle_t handle = 0;
-    cusparseMatDescr_t descr = 0;
-
-    int m = 1024;
+    int m = 2 << 16;
     int n = m;
-    int mb = (m + blockDim - 1) / blockDim;
-    int nb = (n + blockDim - 1) / blockDim;
-    assert(mb * blockDim == m && nb * blockDim == n);
+    int mb = (m + bsize - 1) / bsize;
+    int nb = (n + bsize - 1) / bsize;
+    assert(mb * bsize == m && nb * bsize == n);
     int nnzb = 0;
-    float fzero = 0.0;
-    float fone = 1.0;
+    float alpha = 1.0;
+    float beta = 1.0;
 
     int* hostBsrRowPtr = 0;
     int* hostBsrColInd = 0;
@@ -164,33 +163,25 @@ int main(int argc, char* argv[]) {
 
     float* yHostPtr = 0;
     float* y = 0;
-    float* y0 = 0;
     float* zHostPtr = 0;
     float* z = 0;
-    float* z0 = 0;
 
     printf("generate random BSR matrix\n");
 
-    nnzb = randomBSRMatrix(mb, nb, blockDim, p, &hostBsrRowPtr, &hostBsrColInd, &hostBsrVal);
-    // nnzb = readAndFillBSRMatrix(mb, nb, blockDim, &hostBsrRowPtr, &hostBsrColInd, &hostBsrVal);
+    // nnzb = randomBSRMatrix(mb, nb, bsize, p, &hostBsrRowPtr, &hostBsrColInd, &hostBsrVal);
+    nnzb = readAndFillBSRMatrix(mb, nb, bsize, &hostBsrRowPtr, &hostBsrColInd, &hostBsrVal);
 
-    printf("density of BSR matrix is %f\n", (nnzb * 1.0) / (mb * nb));
+    printf("nnzb = %d, density of BSR matrix is %f\n", nnzb, (nnzb * 1.0) / mb / nb);
 
     printf("gpu memory malloc and memcpy...\n");
 
     HANDLE_ERROR( cudaMalloc((void**)&bsrRowPtr, (mb + 1) * sizeof(int)) );
     HANDLE_ERROR( cudaMalloc((void**)&bsrColInd, nnzb * sizeof(int)) );
-    HANDLE_ERROR( cudaMalloc((void**)&bsrVal, nnzb * blockDim * blockDim * sizeof(float)) );
+    HANDLE_ERROR( cudaMalloc((void**)&bsrVal, nnzb * bsize * bsize * sizeof(float)) );
 
     HANDLE_ERROR( cudaMemcpy(bsrRowPtr, hostBsrRowPtr, (size_t)((mb + 1) * sizeof(int)), cudaMemcpyHostToDevice) );
     HANDLE_ERROR( cudaMemcpy(bsrColInd, hostBsrColInd, (size_t)(nnzb * sizeof(int)), cudaMemcpyHostToDevice) );
-    HANDLE_ERROR( cudaMemcpy(bsrVal, hostBsrVal, (size_t)(nnzb * blockDim * blockDim * sizeof(float)), cudaMemcpyHostToDevice) );
-    
-    HANDLE_CUSPARSE_ERROR( cusparseCreate(&handle), "CUSPARSE Library initialization failed" );
-    
-    HANDLE_CUSPARSE_ERROR( cusparseCreateMatDescr(&descr), "BSR Matrix descriptor initialization failed" );
-    cusparseSetMatType(descr, CUSPARSE_MATRIX_TYPE_GENERAL);
-    cusparseSetMatIndexBase(descr, CUSPARSE_INDEX_BASE_ZERO);
+    HANDLE_ERROR( cudaMemcpy(bsrVal, hostBsrVal, (size_t)(nnzb * bsize * bsize * sizeof(float)), cudaMemcpyHostToDevice) );
 
     printf("prepare y and z...\n");
 
@@ -201,53 +192,77 @@ int main(int argc, char* argv[]) {
     HANDLE_ERROR( cudaMalloc((void**)&z, m * dim * sizeof(float)) );
 
     HANDLE_ERROR( cudaMemcpy(y, yHostPtr, (size_t)(n * dim * sizeof(float)), cudaMemcpyHostToDevice) );
+    HANDLE_ERROR( cudaMemset((void*)z, 0, m * dim * sizeof(float)) );
 
-    printf("warm up...\n");
-    HANDLE_ERROR( cudaMalloc((void**)&y0, n * dim * sizeof(float)) );
-    HANDLE_ERROR( cudaMalloc((void**)&z0, m * dim * sizeof(float)) );
-    HANDLE_ERROR( cudaMemset((void*)y0, 0, n * dim * sizeof(float)) );
-    HANDLE_ERROR( cudaMemset((void*)z0, 0, m * dim * sizeof(float)) );
-    int warnupRounds = 3;
-    for (int i = 0; i < warnupRounds; ++i) {
-        HANDLE_CUSPARSE_ERROR( cusparseSbsrmm(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                              CUSPARSE_OPERATION_TRANSPOSE, mb, dim, nb, nnzb, &fone, descr, bsrVal,
-                                              bsrRowPtr, bsrColInd, blockDim, y0, dim, &fzero, z0, m),
-                               "warmup cusparseSbsrmm failed" );  
+    cublasHandle_t handle;
+    HANDLE_CUBLAS_ERROR( cublasCreate(&handle) );
+
+    printf("block cublas...\n");
+
+    cudaStream_t *streams = (cudaStream_t*)malloc(mb * sizeof(cudaStream_t));
+    for (int i = 0; i < mb; ++i) {
+        HANDLE_ERROR( cudaStreamCreate(&streams[i]) );
     }
 
-    printf("cusparseSbsrmm...\n");
-    float totalTime = 0;
-    int rounds = 10;
-    for (int i = 0; i < rounds; ++i) {
-        HANDLE_ERROR( cudaMemset((void*)z, 0, m * dim * sizeof(float)) );
+    float time;
+    cudaEvent_t start, stop;
+    HANDLE_ERROR( cudaEventCreate(&start) );
+    HANDLE_ERROR( cudaEventCreate(&stop) );
+    HANDLE_ERROR( cudaEventRecord(start, 0) );
 
-        float time;
-        cudaEvent_t start, stop;
-        HANDLE_ERROR( cudaEventCreate(&start) );
-        HANDLE_ERROR( cudaEventCreate(&stop) );
-        HANDLE_ERROR( cudaEventRecord(start, 0) );
+    // auto streamJob = [=](int i) {
+    //     HANDLE_CUBLAS_ERROR( cublasSetStream(handle, streams[i]) );
 
-        HANDLE_CUSPARSE_ERROR( cusparseSbsrmm(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                              CUSPARSE_OPERATION_TRANSPOSE, mb, dim, nb, nnzb, &fone, descr, bsrVal,
-                                              bsrRowPtr, bsrColInd, blockDim, y, dim, &fzero, z, m),
-                               "cusparseSbsrmm failed" ); 
+    //     int start = hostBsrRowPtr[i], end = hostBsrRowPtr[i + 1];
+    //     for (int j = start; j < end; ++j) {
+    //         int idx = hostBsrColInd[j];
+    //         float* A = bsrVal + j * bsize * bsize;
+    //         float* B = y + idx * bsize * dim;
+    //         float* C = z + i * bsize;
+    //         HANDLE_CUBLAS_ERROR( cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, 
+    //                                          bsize, dim, bsize, &alpha, 
+    //                                          A, bsize, B, dim, &beta, 
+    //                                          C, m) );
+    //     }
+    // };
 
-        HANDLE_ERROR( cudaEventRecord(stop, 0) );
-        HANDLE_ERROR( cudaEventSynchronize(stop) );
-        HANDLE_ERROR( cudaEventElapsedTime(&time, start, stop) );
-        printf("[%d] bsrmm cost time:  %3.10f ms \n", i, time);   
-        totalTime += time;
+    // std::vector<std::thread> threads;
+    // for (int i = 0; i < mb; ++i) {
+    //     threads.emplace_back(streamJob, i);
+    // }
+
+    // for (auto&& t : threads) {
+    //     t.join();
+    // }
+
+    for (int i = 0; i < mb; ++i) {
+        HANDLE_CUBLAS_ERROR( cublasSetStream(handle, streams[i]) );
+
+        int start = hostBsrRowPtr[i], end = hostBsrRowPtr[i + 1];
+        for (int j = start; j < end; ++j) {
+            int idx = hostBsrColInd[j];
+            float* A = bsrVal + j * bsize * bsize;
+            float* B = y + idx * bsize * dim;
+            float* C = z + i * bsize;
+            HANDLE_CUBLAS_ERROR( cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, 
+                                             bsize, dim, bsize, &alpha, 
+                                             A, bsize, B, dim, &beta, 
+                                             C, m) );
+        }
     }
-    printf("average bsrmm cost time:  %3.10f ms \n", totalTime / rounds);   
+
+    HANDLE_ERROR( cudaEventRecord(stop, 0) );
+    HANDLE_ERROR( cudaEventSynchronize(stop) );
+    HANDLE_ERROR( cudaEventElapsedTime(&time, start, stop) );
+    printf("bsrmm cost time:  %3.10f ms \n", time);   
 
     HANDLE_ERROR( cudaMemcpy(zHostPtr, z, (size_t)(m * dim * sizeof(float)), cudaMemcpyDeviceToHost) );
 
-    HANDLE_CUSPARSE_ERROR( cusparseDestroyMatDescr(descr), "Matrix descriptor destruction failed" );
-    descr = 0;
-    HANDLE_CUSPARSE_ERROR( cusparseDestroy(handle), "CUSPARSE Library release of resources failed" );
-    handle = 0;
+    for (int i = 0; i < mb; ++i) {
+        HANDLE_ERROR( cudaStreamDestroy(streams[i]) );
+    }
 
     CLEANUP("end");
 
     return 0;
-}
+}    
