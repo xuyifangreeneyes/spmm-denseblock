@@ -24,8 +24,8 @@ void readCSRMatrix(int m, int n, int nnz, int** hostCsrRowPtr, int** hostCsrColI
     *hostCsrColInd = (int*) malloc(nnz * sizeof(int));
     *hostCsrVal = (float*) malloc(nnz * sizeof(float));
     
-    std::fstream s1("collab_ndmetis_indptr.txt");
-    std::fstream s2("collab_ndmetis_indices.txt");
+    std::fstream s1("collab_gpmetis2048_rcmk_indptr.txt");
+    std::fstream s2("collab_gpmetis2048_rcmk_indices.txt");
     int _m_1;
     s1 >> _m_1;
     assert(m + 1 == _m_1);
@@ -83,8 +83,8 @@ int main() {
     int n = m;    
     int nnz = 2358104;
     int dim = 64;
-    float fzero = 0.0;
-    float fone = 1.0;
+    float alpha = 1.0;
+    float beta = 1.0;
 
     printf("density:  %3.10f ms \n", (1.0 * nnz) / ((m * 1.0) * (n * 1.0))); 
 
@@ -167,8 +167,10 @@ int main() {
     HANDLE_ERROR( cudaEventCreate(&stop) );
     HANDLE_ERROR( cudaEventRecord(start, 0) );
 
-    status = cusparseScsrmm(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, m, dim, n, nnz,
-                            &fone, descr, csrVal, csrRowPtr, csrColInd, y, n, &fzero, z, m);
+    status = cusparseScsrmm2(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, 
+                             CUSPARSE_OPERATION_TRANSPOSE, m, dim, n, nnz,
+                             &alpha, descr, csrVal, csrRowPtr, csrColInd, 
+                             y, dim, &beta, z, m);
 
     HANDLE_ERROR( cudaEventRecord(stop, 0) );
     HANDLE_ERROR( cudaEventSynchronize(stop) );

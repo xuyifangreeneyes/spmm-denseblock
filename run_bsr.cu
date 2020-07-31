@@ -24,8 +24,8 @@ void readCSRMatrix(int m, int n, int nnz, int** hostCsrRowPtr, int** hostCsrColI
     *hostCsrColInd = (int*) malloc(nnz * sizeof(int));
     *hostCsrVal = (float*) malloc(nnz * sizeof(float));
     
-    std::fstream s1("collab_ndmetis_indptr.txt");
-    std::fstream s2("collab_ndmetis_indices.txt");
+    std::fstream s1("collab_gpmetis2048_rcmk_indptr.txt");
+    std::fstream s2("collab_gpmetis2048_rcmk_indices.txt");
     int _m_1;
     s1 >> _m_1;
     printf("m = %d _m_1 = %d\n", m, _m_1);
@@ -93,8 +93,8 @@ int main() {
     int nb = (n + blockDim - 1) / blockDim;
     int nnzb = 0;
     int dim = 64;
-    float fzero = 0.0;
-    float fone = 1.0;
+    float alpha = 1.0;
+    float beta = 1.0;
 
     int* hostCsrRowPtr = 0;
     int* hostCsrColInd = 0;
@@ -261,8 +261,8 @@ int main() {
     HANDLE_ERROR( cudaEventRecord(start, 0) );
 
     status = cusparseSbsrmm(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                            CUSPARSE_OPERATION_NON_TRANSPOSE, mb, dim, nb, nnzb, &fone, bsrDescr, bsrVal,
-                            bsrRowPtr, bsrColInd, blockDim, y, nb * blockDim, &fzero, z, mb * blockDim);
+                            CUSPARSE_OPERATION_TRANSPOSE, mb, dim, nb, nnzb, &alpha, bsrDescr, bsrVal,
+                            bsrRowPtr, bsrColInd, blockDim, y, dim, &beta, z, mb * blockDim);
 
     HANDLE_ERROR( cudaEventRecord(stop, 0) );
     HANDLE_ERROR( cudaEventSynchronize(stop) );

@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <cuda_runtime.h>
 #include "cusparse.h"
+// #include "cuda_profiler_api.h"
 
 std::mt19937_64 gen(1234);
 
@@ -146,7 +147,7 @@ int main(int argc, char* argv[]) {
     cusparseHandle_t handle = 0;
     cusparseMatDescr_t descr = 0;
 
-    int m = 1024;
+    int m = 131072;
     int n = m;
     int mb = (m + blockDim - 1) / blockDim;
     int nb = (n + blockDim - 1) / blockDim;
@@ -202,43 +203,66 @@ int main(int argc, char* argv[]) {
 
     HANDLE_ERROR( cudaMemcpy(y, yHostPtr, (size_t)(n * dim * sizeof(float)), cudaMemcpyHostToDevice) );
 
-    printf("warm up...\n");
-    HANDLE_ERROR( cudaMalloc((void**)&y0, n * dim * sizeof(float)) );
-    HANDLE_ERROR( cudaMalloc((void**)&z0, m * dim * sizeof(float)) );
-    HANDLE_ERROR( cudaMemset((void*)y0, 0, n * dim * sizeof(float)) );
-    HANDLE_ERROR( cudaMemset((void*)z0, 0, m * dim * sizeof(float)) );
-    int warnupRounds = 3;
-    for (int i = 0; i < warnupRounds; ++i) {
-        HANDLE_CUSPARSE_ERROR( cusparseSbsrmm(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                              CUSPARSE_OPERATION_TRANSPOSE, mb, dim, nb, nnzb, &fone, descr, bsrVal,
-                                              bsrRowPtr, bsrColInd, blockDim, y0, dim, &fzero, z0, m),
-                               "warmup cusparseSbsrmm failed" );  
-    }
+    // printf("warm up...\n");
+    // HANDLE_ERROR( cudaMalloc((void**)&y0, n * dim * sizeof(float)) );
+    // HANDLE_ERROR( cudaMalloc((void**)&z0, m * dim * sizeof(float)) );
+    // HANDLE_ERROR( cudaMemset((void*)y0, 0, n * dim * sizeof(float)) );
+    // HANDLE_ERROR( cudaMemset((void*)z0, 0, m * dim * sizeof(float)) );
+    // int warnupRounds = 3;
+    // for (int i = 0; i < warnupRounds; ++i) {
+    //     HANDLE_CUSPARSE_ERROR( cusparseSbsrmm(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
+    //                                           CUSPARSE_OPERATION_TRANSPOSE, mb, dim, nb, nnzb, &fone, descr, bsrVal,
+    //                                           bsrRowPtr, bsrColInd, blockDim, y0, dim, &fzero, z0, m),
+    //                            "warmup cusparseSbsrmm failed" );  
+    // }
 
     printf("cusparseSbsrmm...\n");
-    float totalTime = 0;
-    int rounds = 10;
-    for (int i = 0; i < rounds; ++i) {
-        HANDLE_ERROR( cudaMemset((void*)z, 0, m * dim * sizeof(float)) );
+    // float totalTime = 0;
+    // int rounds = 10;
+    // for (int i = 0; i < rounds; ++i) {
+    //     HANDLE_ERROR( cudaMemset((void*)z, 0, m * dim * sizeof(float)) );
 
-        float time;
-        cudaEvent_t start, stop;
-        HANDLE_ERROR( cudaEventCreate(&start) );
-        HANDLE_ERROR( cudaEventCreate(&stop) );
-        HANDLE_ERROR( cudaEventRecord(start, 0) );
+    //     float time;
+    //     cudaEvent_t start, stop;
+    //     HANDLE_ERROR( cudaEventCreate(&start) );
+    //     HANDLE_ERROR( cudaEventCreate(&stop) );
+    //     HANDLE_ERROR( cudaEventRecord(start, 0) );
 
-        HANDLE_CUSPARSE_ERROR( cusparseSbsrmm(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                              CUSPARSE_OPERATION_TRANSPOSE, mb, dim, nb, nnzb, &fone, descr, bsrVal,
-                                              bsrRowPtr, bsrColInd, blockDim, y, dim, &fzero, z, m),
-                               "cusparseSbsrmm failed" ); 
+    //     HANDLE_CUSPARSE_ERROR( cusparseSbsrmm(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
+    //                                           CUSPARSE_OPERATION_TRANSPOSE, mb, dim, nb, nnzb, &fone, descr, bsrVal,
+    //                                           bsrRowPtr, bsrColInd, blockDim, y, dim, &fzero, z, m),
+    //                            "cusparseSbsrmm failed" ); 
 
-        HANDLE_ERROR( cudaEventRecord(stop, 0) );
-        HANDLE_ERROR( cudaEventSynchronize(stop) );
-        HANDLE_ERROR( cudaEventElapsedTime(&time, start, stop) );
-        printf("[%d] bsrmm cost time:  %3.10f ms \n", i, time);   
-        totalTime += time;
-    }
-    printf("average bsrmm cost time:  %3.10f ms \n", totalTime / rounds);   
+    //     HANDLE_ERROR( cudaEventRecord(stop, 0) );
+    //     HANDLE_ERROR( cudaEventSynchronize(stop) );
+    //     HANDLE_ERROR( cudaEventElapsedTime(&time, start, stop) );
+    //     printf("[%d] bsrmm cost time:  %3.10f ms \n", i, time);   
+    //     totalTime += time;
+    // }
+    // printf("average bsrmm cost time:  %3.10f ms \n", totalTime / rounds);   
+
+
+    HANDLE_ERROR( cudaMemset((void*)z, 0, m * dim * sizeof(float)) );
+
+    // cudaProfilerStart();
+
+    float time;
+    cudaEvent_t start, stop;
+    HANDLE_ERROR( cudaEventCreate(&start) );
+    HANDLE_ERROR( cudaEventCreate(&stop) );
+    HANDLE_ERROR( cudaEventRecord(start, 0) );
+
+    HANDLE_CUSPARSE_ERROR( cusparseSbsrmm(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                          CUSPARSE_OPERATION_TRANSPOSE, mb, dim, nb, nnzb, &fone, descr, bsrVal,
+                                          bsrRowPtr, bsrColInd, blockDim, y, dim, &fzero, z, m),
+                           "cusparseSbsrmm failed" ); 
+
+    HANDLE_ERROR( cudaEventRecord(stop, 0) );
+    HANDLE_ERROR( cudaEventSynchronize(stop) );
+    HANDLE_ERROR( cudaEventElapsedTime(&time, start, stop) );
+    printf("bsrmm cost time:  %3.10f ms \n", time);   
+
+    // cudaProfilerStop();
 
     HANDLE_ERROR( cudaMemcpy(zHostPtr, z, (size_t)(m * dim * sizeof(float)), cudaMemcpyDeviceToHost) );
 

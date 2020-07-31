@@ -194,14 +194,15 @@ int main(int argc, char* argv[]) {
     HANDLE_ERROR( cudaMemcpy(y, yHostPtr, (size_t)(n * dim * sizeof(float)), cudaMemcpyHostToDevice) );
     HANDLE_ERROR( cudaMemset((void*)z, 0, m * dim * sizeof(float)) );
 
-    cublasHandle_t handle;
-    HANDLE_CUBLAS_ERROR( cublasCreate(&handle) );
-
     printf("block cublas...\n");
 
-    cudaStream_t *streams = (cudaStream_t*)malloc(mb * sizeof(cudaStream_t));
-    for (int i = 0; i < mb; ++i) {
+    int stream_num = 32;
+    cudaStream_t *streams = (cudaStream_t*)malloc(stream_num * sizeof(cudaStream_t));
+    cublasHandle_t *handles = (cublasHandle_t*)malloc(stream_num * sizeof(cublasHandle_t));
+    for (int i = 0; i < stream_num; ++i) {
+        HANDLE_CUBLAS_ERROR( cublasCreate(&handles[i]) );
         HANDLE_ERROR( cudaStreamCreate(&streams[i]) );
+        HANDLE_CUBLAS_ERROR( cublasSetStream(handles[i], streams[i]) );
     }
 
     float time;
@@ -236,7 +237,6 @@ int main(int argc, char* argv[]) {
     // }
 
     for (int i = 0; i < mb; ++i) {
-        HANDLE_CUBLAS_ERROR( cublasSetStream(handle, streams[i]) );
 
         int start = hostBsrRowPtr[i], end = hostBsrRowPtr[i + 1];
         for (int j = start; j < end; ++j) {
@@ -244,7 +244,7 @@ int main(int argc, char* argv[]) {
             float* A = bsrVal + j * bsize * bsize;
             float* B = y + idx * bsize * dim;
             float* C = z + i * bsize;
-            HANDLE_CUBLAS_ERROR( cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, 
+            HANDLE_CUBLAS_ERROR( cublasSgemm(handles[i % stream_num], CUBLAS_OP_N, CUBLAS_OP_T, 
                                              bsize, dim, bsize, &alpha, 
                                              A, bsize, B, dim, &beta, 
                                              C, m) );
@@ -258,9 +258,12 @@ int main(int argc, char* argv[]) {
 
     HANDLE_ERROR( cudaMemcpy(zHostPtr, z, (size_t)(m * dim * sizeof(float)), cudaMemcpyDeviceToHost) );
 
-    for (int i = 0; i < mb; ++i) {
+    for (int i = 0; i < stream_num; ++i) {
         HANDLE_ERROR( cudaStreamDestroy(streams[i]) );
+        HANDLE_CUBLAS_ERROR( cublasDestroy(handles[i]) );
     }
+    free(streams);
+    free(handles);
 
     CLEANUP("end");
 
