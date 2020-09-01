@@ -70,9 +70,9 @@ std::array<ll, 10> calculate_block_density_dist(const std::vector<std::vector<in
         }
         // std::cout << "k1" << std::endl;
         for (int num : vec) {
-            // if (num == 0) {
-            //     continue;
-            // }
+            if (num == 0) {
+                continue;
+            }
             float occupy = (num * 1.0) / (bsize * bsize);
             int ith = (int) (occupy * 10);
             if (ith >= 10) {
@@ -96,7 +96,7 @@ int main() {
 
     // std::cout << "h2" << std::endl;
 
-    std::array<ll, 10> dist = calculate_block_density_dist(edges, n, 16);
+    std::array<ll, 10> dist = calculate_block_density_dist(edges, n, 32);
     
     // std::cout << "h3" << std::endl;
     

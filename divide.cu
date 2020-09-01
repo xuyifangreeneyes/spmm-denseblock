@@ -71,9 +71,9 @@ void divide_matrix(const std::vector<std::vector<int>>& edges,
             const std::vector<int>& ys = edges[x];
             // for (int y : ys) {
             for (int i = 0; i < ys.size(); ++i) {
-                if (i >= 1 && ys[i] == ys[i - 1]) {
-                    std::cout << "????" << std::endl;
-                }    
+                // if (i >= 1 && ys[i] == ys[i - 1]) {
+                //     std::cout << "????" << std::endl;
+                // }    
                 int y = ys[i];
                 ++counts[y / bsize];
             }
@@ -82,9 +82,9 @@ void divide_matrix(const std::vector<std::vector<int>>& edges,
         int bsr_cnt = 0;
         for (int i = 0; i < nb; ++i) {
             float occupy = (counts[i] * 1.0) / bnum;
-            if (counts[i] > bnum) {
-                std::cout << counts[i] << " oooops" << std::endl;
-            }
+            // if (counts[i] > bnum) {
+            //     std::cout << counts[i] << " oooops" << std::endl;
+            // }
             if (occupy >= density) {
                 bsr_col_ind.push_back(i);
                 flags[i] = bsr_cnt;
@@ -209,13 +209,13 @@ if (err != CUSPARSE_STATUS_SUCCESS) { \
 int main() {
     int n = 235868;
     int nnz = 2358104;
-    int bsize = 16;
+    int bsize = 32;
     int bnum = bsize * bsize;
     int nb = (n + bsize - 1) / bsize;
     int n1 = nb * bsize;
     assert(n1 >= n);
     int dim = 64;
-    float density = 2.0;
+    float density = 0.8;
     float alpha = 1.0;
     float beta = 1.0;
     std::string indptr_file = "collab_gpmetis2048_rcmk_indptr.txt";
