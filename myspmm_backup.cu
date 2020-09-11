@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <cuda_runtime.h>
 #include "cusparse.h"
+#include "cuda_profiler_api.h"
 #include "rocsparse_bsrmm.hpp"
 
 std::mt19937_64 gen(1234);
@@ -218,6 +219,8 @@ int main(int argc, char* argv[]) {
     HANDLE_ERROR( cudaEventCreate(&stop) );
     HANDLE_ERROR( cudaEventRecord(start, 0) );
 
+    cudaProfilerStart();
+
     if (which_bsrmm == "rocsparse") {
         HANDLE_CUSPARSE_ERROR( rocsparse_bsrmm_template<float>(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                                                CUSPARSE_OPERATION_NON_TRANSPOSE, mb, dim, nb, nnzb, fone, descr, bsrVal,
@@ -229,6 +232,8 @@ int main(int argc, char* argv[]) {
                                               bsrRowPtr, bsrColInd, blockDim, y, n, &fzero, z, m),
                                "cusparseSbsrmm failed" ); 
     }
+
+    cudaProfilerStop();
 
     HANDLE_ERROR( cudaEventRecord(stop, 0) );
     HANDLE_ERROR( cudaEventSynchronize(stop) );
