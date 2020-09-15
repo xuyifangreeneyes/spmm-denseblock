@@ -150,7 +150,7 @@ int readAndFillBSRMatrix(int mb, int nb, int blockDim, float p,
                          int **hostBsrRowPtr, int **hostBsrColInd,
                          float **hostBsrVal, float minVal, float maxVal) {
   std::ifstream s1(getBSRName("indptr", mb, nb, blockDim, p));
-  std::ifstream s2(getBSRName("indptr", mb, nb, blockDim, p));
+  std::ifstream s2(getBSRName("indices", mb, nb, blockDim, p));
 
   int mb_plus_one;
   s1 >> mb_plus_one;

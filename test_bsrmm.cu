@@ -90,8 +90,8 @@ int main(int argc, char* argv[]) {
 
     printf("generate random BSR matrix\n");
 
-    nnzb = randomBSRMatrix(mb, nb, blockDim, p, &hostBsrRowPtr, &hostBsrColInd, &hostBsrVal);
-    // nnzb = readAndFillBSRMatrix(mb, nb, blockDim, p, &hostBsrRowPtr, &hostBsrColInd, &hostBsrVal);
+    // nnzb = randomBSRMatrix(mb, nb, blockDim, p, &hostBsrRowPtr, &hostBsrColInd, &hostBsrVal, -1, 1, true);
+    nnzb = readAndFillBSRMatrix(mb, nb, blockDim, p, &hostBsrRowPtr, &hostBsrColInd, &hostBsrVal);
 
     printf("nnzb = %d mb = %d nb = %d\n", nnzb, mb, nb);
     printf("density of BSR matrix is %f\n", (nnzb * 1.0) / ((mb * 1.0) * (nb * 1.0)));
