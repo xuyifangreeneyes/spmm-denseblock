@@ -12,7 +12,7 @@ static std::mt19937_64 gen(1234);
 static std::string getCSRName(const std::string &format, int m, int n,
                               float p) {
   std::stringstream ss;
-  int nnz = (int)(m * n * p);
+  int nnz = (int)(m * (n * p));
   ss << "csr_" << format << "_" << m << "_" << n << "_" << nnz << ".txt";
   return ss.str();
 }
@@ -20,7 +20,7 @@ static std::string getCSRName(const std::string &format, int m, int n,
 static std::string getBSRName(const std::string &format, int mb, int nb,
                               int blockDim, float p) {
   std::stringstream ss;
-  int nnzb = (int)(mb * nb * p);
+  int nnzb = (int)(mb * (nb * p));
   ss << "bsr_" << format << "_" << mb << "_" << nb << "_" << blockDim << "_"
      << nnzb << ".txt";
   return ss.str();

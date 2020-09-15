@@ -11,8 +11,8 @@
 #include "cusparse.h"
 #include "cuda_profiler_api.h"
 #include "load_matrix.h"
-#include "rocsparse_bsrmm.hpp"
 #include "utility.h"
+#include "rocsparse_bsrmm.h"
 
 
 #define CLEANUP(s) \
@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
     HANDLE_ERROR( cudaEventCreate(&stop) );
     HANDLE_ERROR( cudaEventRecord(start, 0) );
 
-    cudaProfilerStart();
+    // cudaProfilerStart();
 
     if (bsrmmImpl == "rocsparse") {
         HANDLE_CUSPARSE_ERROR( rocsparse_bsrmm_template<float>(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -146,7 +146,7 @@ int main(int argc, char* argv[]) {
         assert(false);
     }
 
-    cudaProfilerStop();
+    // cudaProfilerStop();
 
     HANDLE_ERROR( cudaEventRecord(stop, 0) );
     HANDLE_ERROR( cudaEventSynchronize(stop) );

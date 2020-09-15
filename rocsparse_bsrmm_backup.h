@@ -1,11 +1,10 @@
-#pragma once
-#ifndef ROCSPARSE_BSRMM_HPP
-#define ROCSPARSE_BSRMM_HPP
+#ifndef ROCSPARSE_BSRMM_H
+#define ROCSPARSE_BSRMM_H
 
 #include <assert.h>
 #include <cuda_runtime.h>
 #include "cusparse.h"
-#include "bsrmm_device.h"
+#include "rocsparse_bsrmm_impl.h"
 
 // TODO: Something wrong. Need correcting.
 
@@ -568,4 +567,4 @@ cusparseStatus_t rocsparse_bsrmm_template(cusparseHandle_t handle,
     return CUSPARSE_STATUS_SUCCESS;
 }
 
-#endif // ROCSPARSE_BSRMM_HPP
+#endif

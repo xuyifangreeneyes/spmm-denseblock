@@ -1,6 +1,5 @@
-#pragma once
-#ifndef BSRMM_DEVICE_H
-#define BSRMM_DEVICE_H
+#ifndef ROCSPARSE_BSRMM_IMPL_H
+#define ROCSPARSE_BSRMM_IMPL_H
 
 #include <cuda_runtime.h>
 #include "cusparse.h"
@@ -569,4 +568,4 @@ static __device__ void bsrmm_general_blockdim_device(cusparseDirection_t directi
     }
 }
 
-#endif // BSRMM_DEVICE_H
+#endif
