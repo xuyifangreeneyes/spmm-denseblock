@@ -7,6 +7,8 @@
 #include "cusparse.h"
 #include "bsrmm_device.h"
 
+// TODO: Something wrong. Need correcting.
+
 #define launch_bsrmmnn_small_blockdim_kernel_host_pointer(T, block_size, wf_size, bsr_block_dim)                                \
         bsrmmnn_small_blockdim_kernel_host_pointer<T, block_size, wf_size, bsr_block_dim><<<bsrmmnn_blocks, bsrmmnn_threads>>>( \
             dir, mb, n, *alpha, bsr_row_ptr, bsr_col_ind, bsr_val, B, ldb, *beta, C, ldc, idx_base);

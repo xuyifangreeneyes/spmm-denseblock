@@ -71,8 +71,8 @@ int main(int argc, char* argv[]) {
 
     printf("generate random CSR matrix\n");
 
-    // nnz = randomCSRMatrix(m, n, p, &hostCsrRowPtr, &hostCsrColInd, &hostCsrVal);
-    nnz = readAndFillCSRMatrix(m, n, &hostCsrRowPtr, &hostCsrColInd, &hostCsrVal);
+    nnz = randomCSRMatrix(m, n, p, &hostCsrRowPtr, &hostCsrColInd, &hostCsrVal);
+    // nnz = readAndFillCSRMatrix(m, n, &hostCsrRowPtr, &hostCsrColInd, &hostCsrVal);
 
     printf("density of BSR matrix is %f\n", (nnz * 1.0) / (m * n));
 

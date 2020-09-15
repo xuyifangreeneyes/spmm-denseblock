@@ -1,4 +1,9 @@
+#ifndef SPMM_DENSEBLOCK_UTILTITY
+#define SPMM_DENSEBLOCK_UTILTITY
+
 #include <vector>
+#include <cuda_runtime.h>
+#include "cusparse.h"
 
 template<typename T>
 T* vec2ptr(const std::vector<T>& vec) {
@@ -8,3 +13,9 @@ T* vec2ptr(const std::vector<T>& vec) {
     }
     return ptr;
 }
+
+bool check_error(cudaError_t err, const char* file, int line);
+
+bool check_cusparse_error(cusparseStatus_t status, const char* file, int line);
+
+#endif
