@@ -14,8 +14,9 @@ T* vec2ptr(const std::vector<T>& vec) {
     return ptr;
 }
 
-bool check_error(cudaError_t err, const char* file, int line);
+bool checkError(cudaError_t err, const char* file, int line);
 
-bool check_cusparse_error(cusparseStatus_t status, const char* file, int line);
+bool checkCusparseError(cusparseStatus_t status, const char* file, int line);
+
 
 #endif

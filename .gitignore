@@ -1,0 +1,7 @@
+dataset/
+result/
+tmp/
+
+*.o
+*pyc
+.DS_Store

@@ -8,7 +8,7 @@
 #include <cuda_runtime.h>
 #include "cusparse.h"
 #include "cuda_profiler_api.h"
-#include "load_matrix.h"
+#include "load_data.h"
 #include "utility.h"
 #include "gespmm_csrmm.h"
 
@@ -31,13 +31,13 @@ do { \
 } while (0)
 
 #define HANDLE_ERROR( err ) \
-if (!check_error(err, __FILE__, __LINE__)) { \
+if (!checkError(err, __FILE__, __LINE__)) { \
     CLEANUP("CUDA ERROR"); \
     exit(-1); \
 }
 
 #define HANDLE_CUSPARSE_ERROR( err ) \
-if (!check_cusparse_error(err, __FILE__, __LINE__)) { \
+if (!checkCusparseError(err, __FILE__, __LINE__)) { \
     CLEANUP("CUSPARSE ERROR"); \
     exit(-1); \
 }
@@ -112,7 +112,7 @@ int main(int argc, char* argv[]) {
     HANDLE_ERROR( cudaEventCreate(&stop) );
     HANDLE_ERROR( cudaEventRecord(start, 0) );
 
-    // cudaProfilerStart();
+    cudaProfilerStart();
 
     if (csrmmImpl == "gespmm") {
         gespmm_csrmm<float>(m, dim, csrRowPtr, csrColInd, csrVal, y, z);
@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
         assert(false);
     }
 
-    // cudaProfilerStop();
+    cudaProfilerStop();
 
     HANDLE_ERROR( cudaEventRecord(stop, 0) );
     HANDLE_ERROR( cudaEventSynchronize(stop) );
