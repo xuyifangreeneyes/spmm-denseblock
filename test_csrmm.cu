@@ -108,9 +108,9 @@ int main(int argc, char* argv[]) {
   HANDLE_ERROR(cudaMemcpy(y, yHostPtr, (size_t)(n * dim * sizeof(float)),
                           cudaMemcpyHostToDevice));
 
-  printf("cusparseScsrmm...\n");
-
   HANDLE_ERROR(cudaMemset((void*)z, 0, m * dim * sizeof(float)));
+
+  printf("cusparseScsrmm...\n");
 
   float time;
   cudaEvent_t start, stop;

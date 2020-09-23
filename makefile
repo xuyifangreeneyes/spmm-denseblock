@@ -32,6 +32,18 @@ test_csrmm.o: test_csrmm.cu
 test_csrmm: test_csrmm.o load_data.o utility.o
 	$(NVCC) $(NVFLAGS) $(LIBS) -o $@ $^
 
+run_csrmm.o: run_csrmm.cu
+	$(NVCC) $(NVFLAGS) -c -o $@ $^ 
+
+run_csrmm: run_csrmm.o load_data.o utility.o
+	$(NVCC) $(NVFLAGS) $(LIBS) -o $@ $^
+
+run_bsrmm.o: run_bsrmm.cu
+	$(NVCC) $(NVFLAGS) -c -o $@ $^ 
+
+run_bsrmm: run_bsrmm.o load_data.o utility.o
+	$(NVCC) $(NVFLAGS) $(LIBS) -o $@ $^
+
 .PHONY: clean
 clean:
 	rm -rf *.o

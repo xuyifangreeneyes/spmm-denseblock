@@ -71,7 +71,9 @@ int randomCSRMatrix(int m, int n, float p, int **csrRowPtr, int **csrColInd,
 int readAndFillCSRMatrix(int m, int n, float p, int **csrRowPtr,
                          int **csrColInd, float **csrVal, float minVal,
                          float maxVal) {
-  int nnz = loadCSRFromFile(getCSRName(m, n, p), m, csrRowPtr, csrColInd);
+  std::pair<int, int> pair = loadCSRFromFile(getCSRName(m, n, p), csrRowPtr, csrColInd);
+  assert(pair.first == m);
+  int nnz = pair.second;
   *csrVal = randomArray(nnz);
   return nnz;
 }
@@ -113,8 +115,9 @@ int randomBSRMatrix(int mb, int nb, int blockDim, float p, int **bsrRowPtr,
 int readAndFillBSRMatrix(int mb, int nb, int blockDim, float p, int **bsrRowPtr,
                          int **bsrColInd, float **bsrVal, float minVal,
                          float maxVal) {
-  int nnzb = loadCSRFromFile(getBSRName(mb, nb, blockDim, p), mb, bsrRowPtr,
-                             bsrColInd);
+  std::pair<int, int> pair = loadCSRFromFile(getBSRName(mb, nb, blockDim, p), bsrRowPtr, bsrColInd);
+  assert(pair.first == mb);
+  int nnzb = pair.second;
   *bsrVal = randomArray(nnzb * blockDim * blockDim);
   return nnzb;
 }
@@ -137,25 +140,28 @@ void dumpCSRToFile(const std::string &prefix, int n, int nnz, int *csrRowPtr,
   s2 << std::endl;
 }
 
-int loadCSRFromFile(const std::string &prefix, int n, int **csrRowPtr,
+std::pair<int, int> loadCSRFromFile(const std::string &prefix, int **csrRowPtr,
                     int **csrColInd) {
   std::ifstream s1(prefix + "_indptr.txt");
   std::ifstream s2(prefix + "_indices.txt");
 
   int n_plus_one;
   s1 >> n_plus_one;
-  assert(n_plus_one == n + 1);
+  int n = n_plus_one - 1;
+  // std::cout << "n = " << n << std::endl;
   *csrRowPtr = (int *)malloc((n + 1) * sizeof(int));
   for (int i = 0; i <= n; ++i) {
     s1 >> (*csrRowPtr)[i];
   }
 
   int nnz;
+  // std::cout << "nnz = " << nnz << std::endl;
   s2 >> nnz;
+  *csrColInd = (int *)malloc(nnz * sizeof(int));
   for (int i = 0; i < nnz; ++i) {
     s2 >> (*csrColInd)[i];
   }
-  return nnz;
+  return {n, nnz};
 }
 
 int loadGraphFromFile(const std::string &filename,

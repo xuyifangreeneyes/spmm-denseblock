@@ -23,8 +23,8 @@ void analyzeBlockSparseMetrics(const std::vector<std::vector<int>>& edges, int n
     }
 }
 
-int main() {
-    std::string dataset = "ogbl_collab";
+int main(int argc, char* argv[]) {
+    std::string dataset = argv[1];
     std::cout << "dataset=" << dataset << std::endl;
     std::vector<std::vector<int>> edges;
     std::cout << "hi1" << std::endl;

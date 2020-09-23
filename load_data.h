@@ -28,8 +28,7 @@ int readAndFillBSRMatrix(int mb, int nb, int blockDim, float p, int **bsrRowPtr,
 void dumpCSRToFile(const std::string &prefix, int n, int nnz, int *csrRowPtr,
                    int *csrColInd);
 
-int loadCSRFromFile(const std::string &prefix, int n, int **csrRowPtr,
-                    int **csrColInd);
+std::pair<int, int> loadCSRFromFile(const std::string &prefix, int **csrRowPtr, int **csrColInd);
 
 int loadGraphFromFile(const std::string &filename,
                       std::vector<std::vector<int>> &edges);
