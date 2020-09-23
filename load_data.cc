@@ -1,9 +1,12 @@
-#include "load_data.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <iostream>
 #include <fstream>
 #include <random>
 #include <sstream>
+#include <string>
+#include <algorithm>
+#include "load_data.h"
 #include "utility.h"
 
 static std::mt19937_64 gen(1234);
@@ -157,31 +160,19 @@ int loadCSRFromFile(const std::string &prefix, int n, int **csrRowPtr,
 
 int loadGraphFromFile(const std::string &filename,
                       std::vector<std::vector<int>> &edges) {
-  std::ofstream s(filename);
+  std::ifstream fs(filename);
   int n, nnz;
-  s >> n >> nnz;
+  fs >> n >> nnz;
   edges.clear();
   edges.resize(n);
   for (int i = 0; i < nnz; ++i) {
     int x, y;
-    cin >> x >> y;
+    fs >> x >> y;
     edges[x].push_back(y);
   }
-  return nnz;
-}
-
-std::pair<int *, int *> convertGraphToCSR(
-    const std::vector<std::vector<int>> &edges) {
-  int n = edges.size();
-  std::vector<int> indptr, indices;
-  int cnt = 0;
-  indptr.push_back(cnt);
-  for (const auto &neighbors : edges) {
-    cnt += neighbors.size();
-    indptr.push_back(cnt);
-    for (int cid : neighbors) {
-      indices.push_back(cid);
-    }
+  for (int i = 0; i < n; ++i) {
+    std::vector<int>& neighbors = edges[i];
+    std::sort(neighbors.begin(), neighbors.end());
   }
-  return {vec2ptr(indptr), vec2ptr(indices)};
+  return nnz;
 }
