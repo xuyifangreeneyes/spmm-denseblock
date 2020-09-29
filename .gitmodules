@@ -1,0 +1,6 @@
+[submodule "rabbit_order"]
+	path = rabbit_order
+	url = https://github.com/araij/rabbit_order
+[submodule "Gorder"]
+	path = Gorder
+	url = https://github.com/datourat/Gorder

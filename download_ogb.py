@@ -14,9 +14,14 @@ def load_and_dump(gtype, gname):
     edge_index = graph['edge_index']
     n = graph['num_nodes']
     nnz = edge_index.shape[1]
-    assert 0 in edge_index and not n in edge_index # check 0-base
-    with open('tmp/{}_{}.txt'.format(gtype, gname), 'w') as f:
-        f.write('{} {}\n'.format(n, nnz))
+    assert (0 in edge_index) and (n - 1 in edge_index) and (not n in edge_index) # check 0-base
+    # with open('tmp/{}_{}.txt'.format(gtype, gname), 'w') as f:
+    #     f.write('{} {}\n'.format(n, nnz))
+    #     for i in range(nnz):
+    #         f.write('{} {}\n'.format(edge_index[0][i], edge_index[1][i]))
+    #         if i % 100000 == 0:
+    #             print("{} i={}".format(dataset_name, i))
+    with open('tmp/{}_{}_1.txt'.format(gtype, gname), 'w') as f:
         for i in range(nnz):
             f.write('{} {}\n'.format(edge_index[0][i], edge_index[1][i]))
             if i % 100000 == 0:

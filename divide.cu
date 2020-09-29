@@ -8,12 +8,15 @@
 #include <string>
 #include <vector>
 #include "cusparse.h"
+#include "load_data.h"
+#include "rocsparse_bsrmm.h"
+#include "utility.h"
 
 std::mt19937_64 gen(1234);
 
 std::vector<std::vector<int>> csr2adj(const std::string& indptr_file,
-                                      const std::string& indices_file, int n,
-                                      int nnz) {
+                                      const std::string& indices_file, int& n,
+                                      int& nnz) {
   std::fstream s1(indptr_file, std::ios::in);
   std::fstream s2(indices_file, std::ios::in);
 
@@ -21,12 +24,12 @@ std::vector<std::vector<int>> csr2adj(const std::string& indptr_file,
 
   int xx;
   s1 >> xx;
-  assert(xx == n + 1);
+  n = xx - 1;
   for (int i = 0; i <= n; ++i) {
     s1 >> xx;
     indptr.push_back(xx);
   }
-  assert(indptr[n] - indptr[0] == nnz);
+  nnz = indptr[n] - indptr[0];
   s2 >> xx;
   assert(xx == nnz);
   for (int i = 0; i < nnz; ++i) {
@@ -123,58 +126,39 @@ void divide_matrix(const std::vector<std::vector<int>>& edges,
   }
 }
 
-template <class T>
-void dump_vec(const std::vector<T>& vec, const std::string& name) {
-  std::cout << name << ": ";
-  for (T x : vec) {
-    std::cout << x << " ";
-  }
-  std::cout << std::endl;
-}
+// template <class T>
+// void dump_vec(const std::vector<T>& vec, const std::string& name) {
+//   std::cout << name << ": ";
+//   for (T x : vec) {
+//     std::cout << x << " ";
+//   }
+//   std::cout << std::endl;
+// }
 
-void test_divide_matrix() {
-  int n = 4, bsize = 2;
-  float density = 0.6;
-  std::vector<std::vector<int>> edges = {{
-                                             1,
-                                         },
-                                         {
-                                             2,
-                                         },
-                                         {1, 3},
-                                         {0, 1, 2}};
-  std::vector<int> csr_row_ptr, csr_col_ind, bsr_row_ptr, bsr_col_ind;
-  std::vector<float> bsr_val;
+// void test_divide_matrix() {
+//   int n = 4, bsize = 2;
+//   float density = 0.6;
+//   std::vector<std::vector<int>> edges = {{
+//                                              1,
+//                                          },
+//                                          {
+//                                              2,
+//                                          },
+//                                          {1, 3},
+//                                          {0, 1, 2}};
+//   std::vector<int> csr_row_ptr, csr_col_ind, bsr_row_ptr, bsr_col_ind;
+//   std::vector<float> bsr_val;
 
-  divide_matrix(edges, csr_row_ptr, csr_col_ind, bsr_row_ptr, bsr_col_ind,
-                bsr_val, n, bsize, density);
+//   divide_matrix(edges, csr_row_ptr, csr_col_ind, bsr_row_ptr, bsr_col_ind,
+//                 bsr_val, n, bsize, density);
 
-  dump_vec(csr_row_ptr, "csr_row_ptr");
-  dump_vec(csr_col_ind, "csr_col_ind");
+//   dump_vec(csr_row_ptr, "csr_row_ptr");
+//   dump_vec(csr_col_ind, "csr_col_ind");
 
-  dump_vec(bsr_row_ptr, "bsr_row_ptr");
-  dump_vec(bsr_col_ind, "bsr_col_ind");
-  dump_vec(bsr_val, "bsr_val");
-}
-
-template <typename T>
-T* vec2ptr(std::vector<T> v) {
-  T* ptr = (T*)malloc(v.size() * sizeof(T));
-  for (size_t i = 0; i < v.size(); ++i) {
-    ptr[i] = v[i];
-  }
-  return ptr;
-}
-
-float* randomDenseMatrix(int n, int dim, float minVal = -1, float maxVal = 1) {
-  std::uniform_real_distribution<float> dist(minVal, maxVal);
-  int sz = n * dim;
-  float* ptr = (float*)malloc(sz * sizeof(float));
-  for (int i = 0; i < sz; ++i) {
-    ptr[i] = dist(gen);
-  }
-  return ptr;
-}
+//   dump_vec(bsr_row_ptr, "bsr_row_ptr");
+//   dump_vec(bsr_col_ind, "bsr_col_ind");
+//   dump_vec(bsr_val, "bsr_val");
+// }
 
 #define CLEANUP(s)                          \
   do {                                      \
@@ -213,25 +197,40 @@ float* randomDenseMatrix(int n, int dim, float minVal = -1, float maxVal = 1) {
     exit(-1);                                                        \
   }
 
-int main() {
-  int n = 235868;
-  int nnz = 2358104;
-  int bsize = 32;
+int main(int argc, char* argv[]) {
+  std::string prefix = "tmp/" + std::string(argv[1]);
+  std::cout << prefix << std::endl;
+  int bsize = std::stoi(argv[2]);
+  int dim = std::stoi(argv[3]);
+  std::string bsrmmImpl(argv[4]);
+  int transposeB = std::stoi(argv[5]);
+  float density = std::stof(argv[6]);
+  
+  int n;
+  int nnz;
+  std::string indptr_file = prefix + "_indptr.txt";
+  std::string indices_file = prefix + "_indices.txt";
+  std::cout << "csr to adj..." << std::endl;
+  std::vector<std::vector<int>> edges = csr2adj(indptr_file, indices_file, n, nnz);
+
   int bnum = bsize * bsize;
   int nb = (n + bsize - 1) / bsize;
   int n1 = nb * bsize;
   assert(n1 >= n);
-  int dim = 64;
-  float density = 0.8;
   float alpha = 1.0;
   float beta = 1.0;
-  std::string indptr_file = "collab_gpmetis2048_rcmk_indptr.txt";
-  std::string indices_file = "collab_gpmetis2048_rcmk_indices.txt";
 
-  std::cout << "csr to adj..." << std::endl;
-
-  std::vector<std::vector<int>> edges =
-      csr2adj(indptr_file, indices_file, n, nnz);
+  cusparseOperation_t transB;
+  int ldb;
+  if (transposeB == 0) {
+    transB = CUSPARSE_OPERATION_NON_TRANSPOSE;
+    ldb = n;
+  } else if (transposeB == 1) {
+    transB = CUSPARSE_OPERATION_TRANSPOSE;
+    ldb = dim;
+  } else {
+    assert(false);
+  }
 
   std::vector<int> csr_row_ptr, csr_col_ind, bsr_row_ptr, bsr_col_ind;
   std::vector<float> bsr_val;
@@ -275,16 +274,16 @@ int main() {
 
   std::cout << "vec2ptr..." << std::endl;
 
-  hostCsrRowPtr = vec2ptr<int>(std::move(csr_row_ptr));
-  hostCsrColInd = vec2ptr<int>(std::move(csr_col_ind));
+  hostCsrRowPtr = vec2ptr<int>(csr_row_ptr);
+  hostCsrColInd = vec2ptr<int>(csr_col_ind);
   hostCsrVal = (float*)malloc(csrNnz * sizeof(float));
   for (int i = 0; i < csrNnz; ++i) {
-    hostCsrVal[i] = 1;
+    hostCsrVal[i] = 1.0;
   }
 
-  hostBsrRowPtr = vec2ptr<int>(std::move(bsr_row_ptr));
-  hostBsrColInd = vec2ptr<int>(std::move(bsr_col_ind));
-  hostBsrVal = vec2ptr<float>(std::move(bsr_val));
+  hostBsrRowPtr = vec2ptr<int>(bsr_row_ptr);
+  hostBsrColInd = vec2ptr<int>(bsr_col_ind);
+  hostBsrVal = vec2ptr<float>(bsr_val);
 
   std::cout << "gpu memory malloc and memcpy..." << std::endl;
 
@@ -347,8 +346,8 @@ int main() {
   HANDLE_ERROR(cudaEventRecord(start1, 0));
 
   HANDLE_CUSPARSE_ERROR(cusparseScsrmm2(
-      handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE, n,
-      dim, n, csrNnz, &alpha, csrDescr, csrVal, csrRowPtr, csrColInd, y, dim,
+      handle, CUSPARSE_OPERATION_NON_TRANSPOSE, transB, n,
+      dim, n, csrNnz, &alpha, csrDescr, csrVal, csrRowPtr, csrColInd, y, ldb,
       &beta, z, n1));
 
   HANDLE_ERROR(cudaEventRecord(stop1, 0));
@@ -359,10 +358,19 @@ int main() {
   HANDLE_ERROR(cudaEventCreate(&stop2));
   HANDLE_ERROR(cudaEventRecord(start2, 0));
 
-  HANDLE_CUSPARSE_ERROR(cusparseSbsrmm(
-      handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
-      CUSPARSE_OPERATION_TRANSPOSE, nb, dim, nb, bsrNnzb, &alpha, bsrDescr,
-      bsrVal, bsrRowPtr, bsrColInd, bsize, y, dim, &beta, z, n1));
+  if (bsrmmImpl == "rocsparse") {
+    HANDLE_CUSPARSE_ERROR(rocsparse_bsrmm_template<float>(
+        handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
+        transB, nb, dim, nb, bsrNnzb, alpha, bsrDescr,
+        bsrVal, bsrRowPtr, bsrColInd, bsize, y, ldb, beta, z, n1));
+  } else if (bsrmmImpl == "cusparse") { 
+    HANDLE_CUSPARSE_ERROR(cusparseSbsrmm(
+        handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
+        transB, nb, dim, nb, bsrNnzb, &alpha, bsrDescr,
+        bsrVal, bsrRowPtr, bsrColInd, bsize, y, ldb, &beta, z, n1));
+  } else {
+    assert(false);
+  }
 
   HANDLE_ERROR(cudaEventRecord(stop2, 0));
   HANDLE_ERROR(cudaEventSynchronize(stop2));
@@ -371,6 +379,7 @@ int main() {
   printf("csrmm cost time:  %3.10f ms \n", time1);
   printf("bsrmm cost time:  %3.10f ms \n", time2);
   printf("total cost time:  %3.10f ms \n", time1 + time2);
+  printf("%3.5f+%3.5f=%3.5f\n", time1, time2, time1 + time2);
 
   HANDLE_ERROR(cudaMemcpy(zHostPtr, z, (size_t)(n1 * dim * sizeof(float)),
                           cudaMemcpyDeviceToHost));

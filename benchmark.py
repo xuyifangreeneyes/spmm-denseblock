@@ -30,6 +30,20 @@ def test_csrmm():
                     print("hi2")
                     subprocess.run(['./test_csrmm', str(density), str(feat_dim), csrmm_impl], stdout=f, stderr=f)
 
+
+def run_csrmm():
+    # dataset_list =  ['ogbn_arxiv', 'ogbn_proteins', 'ogbl_ppa', 'ogbl_collab', 'ogbl_ddi']
+    dataset_list =  ['ogbl_ddi',]
+    reordering_list = ['original', 'rcmk', 'rabbit']
+    feat_dim_list = [16, 32, 64, 128]
+    spmm_list = [('cusparseScsrmm', 0), ('cusparseScsrmm2', 1), ('gespmm', 0)]
+    for dataset in dataset_list:
+        for feat_dim in feat_dim_list:
+            for spmm, trans in spmm_list:
+                for reordering in reordering_list:
+                    subprocess.run(['./run_csrmm', dataset + '_' + reordering, str(feat_dim), spmm, str(trans)])
+
 if __name__ == '__main__':
-    test_bsrmm()
+    # test_bsrmm()
     # test_csrmm()
+    run_csrmm()

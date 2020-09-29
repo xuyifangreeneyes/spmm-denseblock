@@ -20,6 +20,12 @@ reorder_graph.o: reorder_graph.cc
 reorder_graph: reorder_graph.o reorder_strategy.o load_data.o utility.o
 	$(NVCC) $(INCLUDE) $(NVFLAGS) $(LIBS) -o $@ $^
 
+rabbit_reorder.o: rabbit_reorder.cc
+	$(CC) $(INCLUDE) $(CFLAGS) $(LIBS) -c -o $@ $^
+
+rabbit_reorder: rabbit_reorder.o reorder_strategy.o load_data.o utility.o
+	$(NVCC) $(INCLUDE) $(NVFLAGS) $(LIBS) -o $@ $^
+
 test_bsrmm.o: test_bsrmm.cu
 	$(NVCC) $(NVFLAGS) -c -o $@ $^ 
 
@@ -42,6 +48,12 @@ run_bsrmm.o: run_bsrmm.cu
 	$(NVCC) $(NVFLAGS) -c -o $@ $^ 
 
 run_bsrmm: run_bsrmm.o load_data.o utility.o
+	$(NVCC) $(NVFLAGS) $(LIBS) -o $@ $^
+
+divide.o: divide.cu
+	$(NVCC) $(NVFLAGS) -c -o $@ $^ 
+
+divide: divide.o load_data.o utility.o
 	$(NVCC) $(NVFLAGS) $(LIBS) -o $@ $^
 
 .PHONY: clean

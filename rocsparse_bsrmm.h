@@ -1,6 +1,7 @@
 #ifndef ROCSPARSE_BSRMM_H
 #define ROCSPARSE_BSRMM_H
 
+#include <iostream>
 #include <assert.h>
 #include <cuda_runtime.h>
 #include "cusparse.h"
@@ -140,13 +141,15 @@ cusparseStatus_t rocsparse_bsrmm_template(
     return CUSPARSE_STATUS_MATRIX_TYPE_NOT_SUPPORTED;
   }
 
+  // std::cout << "hello1" << std::endl;
+
   // Check sizes
   if (mb < 0 || n < 0 || kb < 0 || nnzb < 0 || block_dim <= 0) {
     return CUSPARSE_STATUS_INVALID_VALUE;
   }
 
   // Quick return if possible
-  if (mb == 0 || n == 0 || kb == 0) {
+  if (mb == 0 || n == 0 || kb == 0 || nnzb == 0) {
     return CUSPARSE_STATUS_SUCCESS;
   }
 
@@ -183,6 +186,8 @@ cusparseStatus_t rocsparse_bsrmm_template(
   if (block_dim == 1) {
     assert(false);
   }
+
+  // std::cout << "hello" << std::endl;
 
   if (block_dim == 2) {
     if (trans_B == CUSPARSE_OPERATION_NON_TRANSPOSE) {

@@ -8,8 +8,10 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include "cuda_profiler_api.h"
 #include "cusparse.h"
 #include "load_data.h"
+#include "gespmm_csrmm.h"
 #include "utility.h"
 
 #define CLEANUP(s)                          \
@@ -43,8 +45,11 @@
 
 int main(int argc, char* argv[]) {
   std::string prefix = "tmp/" + std::string(argv[1]);
-  std::cout << prefix << std::endl;
   int dim = std::stoi(argv[2]);
+  std::string csrmmImpl(argv[3]);
+  int transposeB = std::stoi(argv[4]);
+  printf("graph = %s dim = %d csrmmImpl = %s transposeB = %d\n", 
+         argv[1], dim, csrmmImpl.c_str(), transposeB);
 
   cusparseHandle_t handle = 0;
   cusparseMatDescr_t descr = 0;
@@ -61,7 +66,7 @@ int main(int argc, char* argv[]) {
   hostCsrVal = vec2ptr(std::vector<float>(nnz, 1.0));
   
   float alpha = 1.0;
-  float beta = 1.0;
+  float beta = 0.0;
 
   int* csrRowPtr = 0;
   int* csrColInd = 0;
@@ -71,6 +76,18 @@ int main(int argc, char* argv[]) {
   float* y = 0;
   float* zHostPtr = 0;
   float* z = 0;
+
+  cusparseOperation_t transB;
+  int ldb;
+  if (transposeB == 0) {
+    transB = CUSPARSE_OPERATION_NON_TRANSPOSE;
+    ldb = n;
+  } else if (transposeB == 1) {
+    transB = CUSPARSE_OPERATION_TRANSPOSE;
+    ldb = dim;
+  } else {
+    assert(false);
+  }
 
   printf("gpu memory malloc and memcpy...\n");
 
@@ -100,23 +117,46 @@ int main(int argc, char* argv[]) {
 
   printf("cusparseScsrmm...\n");
 
-  float time;
-  cudaEvent_t start, stop;
+  int epoch = 10;
+  float totalTime = 0;
 
-  HANDLE_ERROR(cudaEventCreate(&start));
-  HANDLE_ERROR(cudaEventCreate(&stop));
-  HANDLE_ERROR(cudaEventRecord(start, 0));
+  for (int i = 0; i < epoch; ++i) {
+    float time;
+    cudaEvent_t start, stop;
 
-  HANDLE_CUSPARSE_ERROR( cusparseScsrmm2(
-      handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-      CUSPARSE_OPERATION_TRANSPOSE, n, dim, n, nnz, &alpha,
-      descr, csrVal, csrRowPtr, csrColInd, y, dim, &beta, z, n) );
+    // cudaProfilerStart();
 
-  HANDLE_ERROR(cudaEventRecord(stop, 0));
-  HANDLE_ERROR(cudaEventSynchronize(stop));
-  HANDLE_ERROR(cudaEventElapsedTime(&time, start, stop));
+    HANDLE_ERROR(cudaEventCreate(&start));
+    HANDLE_ERROR(cudaEventCreate(&stop));
+    HANDLE_ERROR(cudaEventRecord(start, 0));
 
-  printf("csrmm cost time:  %3.10f ms \n", time);
+    if (csrmmImpl == "cusparseScsrmm") {
+      assert(transB == CUSPARSE_OPERATION_NON_TRANSPOSE);
+      HANDLE_CUSPARSE_ERROR( cusparseScsrmm(
+        handle, CUSPARSE_OPERATION_NON_TRANSPOSE, n, dim, n, nnz, &alpha,
+        descr, csrVal, csrRowPtr, csrColInd, y, ldb, &beta, z, n) );
+    } else if (csrmmImpl == "cusparseScsrmm2") {
+      HANDLE_CUSPARSE_ERROR( cusparseScsrmm2(
+        handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+        transB, n, dim, n, nnz, &alpha,
+        descr, csrVal, csrRowPtr, csrColInd, y, ldb, &beta, z, n) );    
+    } else if (csrmmImpl == "gespmm") {
+      gespmm_csrmm<float>(n, dim, csrRowPtr, csrColInd, csrVal, y, z);
+    } else {
+      assert(false);
+    }
+
+    HANDLE_ERROR(cudaEventRecord(stop, 0));
+    HANDLE_ERROR(cudaEventSynchronize(stop));
+    HANDLE_ERROR(cudaEventElapsedTime(&time, start, stop));
+
+    // cudaProfilerStop();
+
+    printf("csrmm cost time:  %3.10f ms \n", time);
+    totalTime += time;
+  }
+
+  printf("average csrmm cost time: %3.10f ms\n", totalTime / epoch);
 
   HANDLE_ERROR( cudaMemcpy(zHostPtr, z, (size_t)(n * dim * sizeof(float)),
                            cudaMemcpyDeviceToHost) );
